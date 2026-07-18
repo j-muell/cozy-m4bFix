@@ -25,7 +25,7 @@ class Application(Adw.Application):
     def __init__(self, pkgdatadir: str):
         self.pkgdatadir = pkgdatadir
 
-        super().__init__(application_id="com.github.geigi.cozy")
+        super().__init__(application_id="com.github.geigi.cozy.m4bFix")
         self.init_custom_widgets()
 
         GLib.setenv("PULSE_PROP_media.role", "music", True)

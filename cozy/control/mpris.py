@@ -221,7 +221,7 @@ class MPRIS(Server):
         self._bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         Gio.bus_own_name_on_connection(
             self._bus,
-            "org.mpris.MediaPlayer2.com.github.geigi.cozy",
+            "org.mpris.MediaPlayer2.com.github.geigi.cozy.m4bFix",
             Gio.BusNameOwnerFlags.NONE,
             None,
             None,
@@ -341,7 +341,7 @@ class MPRIS(Server):
 
     @property
     def desktop_entry(self):
-        return GLib.Variant("s", "com.github.geigi.cozy")
+        return GLib.Variant("s", "com.github.geigi.cozy.m4bFix")
 
     @property
     def identity(self):

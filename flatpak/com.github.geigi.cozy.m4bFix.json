@@ -1,7 +1,7 @@
 {
   "app-id": "com.github.geigi.cozy.m4bFix",
   "runtime": "org.gnome.Platform",
-  "runtime-version": "master",
+  "runtime-version": "50",
   "sdk": "org.gnome.Sdk",
   "command": "com.github.geigi.cozy",
   "desktop-file-name-suffix": " (M4B Fix)",
