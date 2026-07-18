@@ -1,5 +1,8 @@
 import os
 from urllib.parse import unquote, urlparse
+import re
+import shutil
+import subprocess
 
 from gi.repository import GLib, Gst, GstPbutils
 from mutagen import File
@@ -9,6 +12,9 @@ from mutagen.mp4 import MP4
 from cozy.media.chapter import Chapter
 from cozy.media.media_file import MediaFile
 
+_MP4CHAPS_LINE_RE = re.compile(
+    r'^\s*Chapter\s*#\d+\s*-\s*(\d+):(\d+):(\d+(?:\.\d+)?)\s*-\s*"?(.*?)"?\s*$'
+)
 
 class TagReader:
     def __init__(self, uri: str, discoverer_info: GstPbutils.DiscovererInfo):
@@ -54,28 +60,46 @@ class TagReader:
         return unquote(directory)
 
     def _get_author(self):
-        authors = (
-            self._get_string_list(Gst.TAG_ARTIST)
-            if self.tag_format == "ogg"
-            else self._get_string_list(Gst.TAG_COMPOSER)
-        )
+        mutagen_file = self._get_mutagen_file()
+
+        if self.tag_format == "ogg":
+            authors = self._get_string_list(Gst.TAG_ARTIST)
+        elif isinstance(mutagen_file, MP4):
+            authors = self._get_string_list(Gst.TAG_ARTIST)
+        else:
+            authors = self_get_string_list(Gst.TAG_COMPOSER)
+
 
         if authors and authors[0]:
             return "; ".join(authors)
         else:
             return _("Unknown")
 
+        # authors = (
+          #  self._get_string_list(Gst.TAG_ARTIST)
+           # if self.tag_format == "ogg"
+            #else self._get_string_list(Gst.TAG_COMPOSER)
+        #)
+
     def _get_reader(self):
-        readers = (
-            self._get_string_list(Gst.TAG_PERFORMER)
-            if self.tag_format == "ogg"
-            else self._get_string_list(Gst.TAG_ARTIST)
-        )
+        mutagen_file = self._get_mutagen_file()
+
+        if self.tag_format == "ogg":
+            readers = self._get_string_list(Gst.TAG_PERFORMER)
+        elif isinstance(mutagen_file, MP4):
+            readers = self._get_string_list(Gst.TAG_COMPOSER)
+        else:
+            readers = self._get_string_list(Gst.TAG_ARTIST)
 
         if readers and readers[0]:
             return "; ".join(readers)
         else:
             return _("Unknown")
+        #readers = (
+          #  self._get_string_list(Gst.TAG_PERFORMER)
+          #  if self.tag_format == "ogg"
+          #  else self._get_string_list(Gst.TAG_ARTIST)
+        #)
 
     def _get_disk(self):
         success, value = self.tags.get_uint_index(Gst.TAG_ALBUM_VOLUME_NUMBER, 0)
@@ -97,9 +121,14 @@ class TagReader:
         filename_without_extension = os.path.splitext(filename)[0]
         return unquote(filename_without_extension)
 
+    def _get_mutagen_file(self):
+        if not hasattr(self, "_mutagen_file"):
+            path = unquote(urlparse(self.uri).path)
+            self._mutagen_file = File(path)
+        return self._mutagen_file
+
     def _get_chapters(self):
-        path = unquote(urlparse(self.uri).path)
-        mutagen_file = File(path)
+        mutagen_file = self._get_mutagen_file()
 
         if isinstance(mutagen_file, MP4):
             return self._get_mp4_chapters(mutagen_file)
@@ -154,7 +183,9 @@ class TagReader:
 
     def _get_mp4_chapters(self, file: MP4) -> list[Chapter]:
         if not file.chapters or len(file.chapters) == 0:
-            return self._get_single_file_chapter()
+            path = unquote(urlparse(self.uri).path)
+            fallback = self._get_mp4_chapters_via_mp4chaps(path)
+            return fallback if fallback else self._get_single_file_chapter()
 
         chapters = []
 
@@ -168,6 +199,60 @@ class TagReader:
                 Chapter(
                     name=chapter.title or "",
                     position=int(chapter.start * Gst.SECOND),
+                    length=length,
+                    number=index + 1,
+                )
+            )
+
+        return chapters
+
+    def _get_mp4_chapters_via_mp4chaps(self, path: str) -> list[Chapter] | None:
+        """
+            Fallback for MP4/M4B files using the QuickTime text-track chapter format,
+            which mutagen's MP4.chapters does not parse (it only reads the
+            'moov.udta.chpl' Nero-style atom). mp4chaps (from mp4v2) reads both.
+            Returns None if mp4chaps is unavailable or finds nothing, so the caller
+            can fall back to a single chapter as before.
+        """
+        mp4chaps_path = shutil.which("mp4chaps")
+        if not mp4chaps_path:
+            return None
+
+        try:
+            result = subprocess.run(
+                [mp4chaps_path, "-l", path],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+        except (subprocess.SubprocessError, OSError):
+            return None
+        if result.returncode != 0:
+            return None
+
+        raw_chapters = []
+        for line in result.stdout.splitlines():
+            match = _MP4CHAPS_LINE_RE.match(line)
+            if not match:
+                continue
+            hours, minutes, seconds, title = match.groups()
+            start_seconds = int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+            raw_chapters.append((start_seconds, title))
+        if not raw_chapters:
+            return None
+
+        chapters = []
+        for index, (start_seconds, title) in enumerate(raw_chapters):
+            if index < len(raw_chapters) - 1:
+                length = raw_chapters[index + 1][0] - start_seconds
+            else:
+                length = self._get_length_in_seconds() - start_seconds
+
+            chapters.append(
+                Chapter(
+                    name=title,
+                    position=int(start_seconds * Gst.SECOND),
                     length=length,
                     number=index + 1,
                 )

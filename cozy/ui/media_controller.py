@@ -61,15 +61,25 @@ class MediaController(Adw.BreakpointBin):
         self._playback_control_view_model = inject.instance(PlaybackControlViewModel)
         self._playback_speed_view_model = inject.instance(PlaybackSpeedViewModel)
         self._artwork_cache: ArtworkCache = inject.instance(ArtworkCache)
+
+        # CHANGED FOR BOOK ICON FIX
         self._connect_view_model()
         self._connect_widgets()
 
-        self._on_book_changed()
+        self._initial_state_loaded = False
+        self.connect("realize", self._load_initial_state)
+       #self._on_book_changed()
         self._on_lock_ui_changed()
         self._on_length_changed()
         self._on_position_changed()
         self._on_volume_changed()
         self._setup_shortcuts()
+
+    def _load_initial_state(self, *_):
+        if self._initial_state_loaded:
+            return
+        self._initial_state_loaded = True
+        self._on_book_changed()
 
     def _connect_view_model(self):
         self._playback_control_view_model.bind_to("book", self._on_book_changed)

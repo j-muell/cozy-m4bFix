@@ -1,9 +1,13 @@
 {
-  "app-id": "com.github.geigi.cozy",
+  "app-id": "com.github.geigi.cozy.m4bFix",
   "runtime": "org.gnome.Platform",
   "runtime-version": "master",
   "sdk": "org.gnome.Sdk",
   "command": "com.github.geigi.cozy",
+  "desktop-file-name-suffix": " (M4B Fix)",
+  "rename-desktop-file": "com.github.geigi.cozy.desktop",
+  "rename-appdata-file": "com.github.geigi.cozy.appdata.xml",
+  "rename-icon": "com.github.geigi.cozy",
   "finish-args": [
     "--share=ipc",
     "--share=network",
@@ -20,6 +24,21 @@
   ],
   "modules": [
     "python-deps.json",
+    {
+      "name": "mp4v2",
+      "buildsystem": "cmake-ninja",
+      "config-opts": [
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+      ],
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/enzo1982/mp4v2/releases/download/v2.1.3/mp4v2-2.1.3.tar.bz2",
+          "sha256": "033185c17bf3c5fdd94020c95f8325be2e5356558e3913c3d6547a85dd61f7f1"
+        }
+      ]
+    },
     {
       "name": "cozy",
       "buildsystem": "meson",
